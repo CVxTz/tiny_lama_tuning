@@ -36,7 +36,7 @@ quant_config = BitsAndBytesConfig(
 )
 # Model
 model = AutoModelForCausalLM.from_pretrained(
-    output_name,
+    base_model_name,
     quantization_config=quant_config,
     device_map={"": 0},
 )
@@ -46,7 +46,7 @@ text_gen = pipeline(
     task="text-generation",
     model=model,
     tokenizer=llama_tokenizer,
-    max_new_tokens=10,
+    max_new_tokens=256,
     do_sample=False,
 )
 output = text_gen(f"<s>[INST] {query} [/INST]")
