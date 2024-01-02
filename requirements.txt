@@ -1,0 +1,7 @@
+accelerate==0.21.0
+peft==0.4.0
+bitsandbytes==0.41.3.post2
+transformers==4.36.2
+trl==0.4.7
+scipy==1.11.4
+ruff==0.1.10
