@@ -1,10 +1,49 @@
 import torch
-from transformers import pipeline
+from time import perf_counter
+from contextlib import contextmanager
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    pipeline,
+)
+
+
+@contextmanager
+def catch_time() -> float:
+    start = perf_counter()
+    yield lambda: perf_counter() - start
+    print(f"Time: {perf_counter() - start:.3f} seconds")
+
 
 if __name__ == "__main__":
+
+    base_model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    # Tokenizer
+    llama_tokenizer = AutoTokenizer.from_pretrained(
+        base_model_name, trust_remote_code=True
+    )
+    llama_tokenizer.pad_token = llama_tokenizer.eos_token
+    llama_tokenizer.padding_side = "right"  # Fix for fp16
+    # Quantization Config
+    quant_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=False,
+    )
+    # Model
+    base_model = AutoModelForCausalLM.from_pretrained(
+        base_model_name,
+        device_map={"": 0} , quantization_config=quant_config
+    )
+    base_model.config.use_cache = True
+    base_model.config.pretraining_tp = 1
+
     pipe = pipeline(
         "text-generation",
-        model="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        model=base_model,
+        tokenizer=llama_tokenizer,
         torch_dtype=torch.bfloat16,
         device_map="auto",
     )
@@ -52,9 +91,9 @@ if __name__ == "__main__":
     )
 
     print(prompt)
-
-    outputs = pipe(
-        prompt,
-        max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95, return_full_text=False
-    )
-    print(outputs[0]["generated_text"])
+    with catch_time():
+        outputs = pipe(
+            prompt,
+            max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95, return_full_text=False
+        )
+        print(outputs[0]["generated_text"])
