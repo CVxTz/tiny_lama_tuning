@@ -5,3 +5,5 @@ transformers==4.36.2
 trl==0.4.7
 scipy==1.11.4
 ruff==0.1.10
+pandas~=2.1.4
+datasets~=2.16.1
