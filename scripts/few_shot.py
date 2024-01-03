@@ -17,7 +17,6 @@ def catch_time() -> float:
 
 
 if __name__ == "__main__":
-
     base_model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     # Tokenizer
     llama_tokenizer = AutoTokenizer.from_pretrained(
@@ -34,8 +33,7 @@ if __name__ == "__main__":
     )
     # Model
     base_model = AutoModelForCausalLM.from_pretrained(
-        base_model_name,
-        device_map={"": 0} , quantization_config=quant_config
+        base_model_name, device_map={"": 0}, quantization_config=quant_config
     )
     base_model.config.use_cache = True
     base_model.config.pretraining_tp = 1
@@ -52,7 +50,7 @@ if __name__ == "__main__":
         {
             "role": "system",
             "content": "You are a friendly chatbot that uses the context to answer questions with the minimum amount of"
-                       " words",
+            " words",
         },
         {
             "role": "user",
@@ -68,8 +66,8 @@ if __name__ == "__main__":
         {
             "role": "user",
             "content": "Question: What does MDP stand for ?\n"
-                       "Context: In mathematics, a Markov decision process (MDP) is a discrete-time stochastic control "
-                       "process.",
+            "Context: In mathematics, a Markov decision process (MDP) is a discrete-time stochastic control "
+            "process.",
         },
         {
             "role": "assistant",
@@ -81,9 +79,9 @@ if __name__ == "__main__":
         {
             "role": "user",
             "content": "Question: What is the data model of Redis ?\n"
-                       "Context: Redis is an in-memory database that persists on disk. The data model is key-value, "
-                       "but many different kind of values are supported: Strings, Lists, Sets, Sorted Sets, Hashes, "
-                       "Streams, HyperLogLogs, Bitmaps. ",
+            "Context: Redis is an in-memory database that persists on disk. The data model is key-value, "
+            "but many different kind of values are supported: Strings, Lists, Sets, Sorted Sets, Hashes, "
+            "Streams, HyperLogLogs, Bitmaps. ",
         }
     ]
     prompt = pipe.tokenizer.apply_chat_template(
@@ -94,6 +92,11 @@ if __name__ == "__main__":
     with catch_time():
         outputs = pipe(
             prompt,
-            max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95, return_full_text=False
+            max_new_tokens=256,
+            do_sample=True,
+            temperature=0.7,
+            top_k=50,
+            top_p=0.95,
+            return_full_text=False,
         )
         print(outputs[0]["generated_text"])
