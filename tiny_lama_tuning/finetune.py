@@ -19,9 +19,7 @@ def build_data(tokenizer, split="train"):
     data_name = "squad_v2"
     data = load_dataset(data_name, split=split)
 
-    data_df = (
-        pd.DataFrame(data).drop_duplicates(subset=["title", "context"])
-    )
+    data_df = pd.DataFrame(data).drop_duplicates(subset=["title", "context"])
 
     data_df["text"] = data_df.apply(
         lambda x: tokenizer.apply_chat_template(
@@ -43,9 +41,11 @@ def build_data(tokenizer, split="train"):
         axis=1,
     )
 
-    print(data_df["text"].values[0])
+    data_small = data_df.sample(16).reset_index(drop=True)
 
-    data_small = datasets.Dataset.from_pandas(data_df)
+    print(data_small["text"].values[0])
+
+    data_small = datasets.Dataset.from_pandas(data_small)
 
     return data_small
 
@@ -62,49 +62,51 @@ if __name__ == "__main__":
     llama_tokenizer = AutoTokenizer.from_pretrained(
         base_model_name, trust_remote_code=True
     )
-    llama_tokenizer.pad_token = llama_tokenizer.eos_token
-    llama_tokenizer.padding_side = "right"  # Fix for fp16
 
     training_data = build_data(llama_tokenizer, split="train")
+
+    print(f"{len(training_data)=}")
 
     # Quantization Config
     quant_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_use_double_quant=False,
+        bnb_4bit_compute_dtype=torch.bfloat16,
     )
     # Model
     base_model = AutoModelForCausalLM.from_pretrained(
-        base_model_name, device_map={"": 0}, quantization_config=quant_config
+        base_model_name,
+        device_map={"": 0},
+        quantization_config=quant_config,
+        trust_remote_code=True,
     )
-    base_model.config.use_cache = False
-    base_model.config.pretraining_tp = 1
 
+    target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'down_proj', 'up_proj', 'lm_head']
     # LoRA Config
     peft_parameters = LoraConfig(
-        lora_alpha=16,
-        lora_dropout=0.1,
-        r=64,
+        lora_alpha=8,
+        lora_dropout=0.05,
+        r=8,
         bias="none",
         task_type="CAUSAL_LM",
-        target_modules=["q_proj", "v_proj"],
+        target_modules=target_modules,
     )
     # Training Params
     train_params = TrainingArguments(
         output_dir=str(BASE_PATH / "results_modified"),
-        num_train_epochs=1,
+        num_train_epochs=200,
         per_device_train_batch_size=4,
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=4,
         optim="paged_adamw_32bit",
         save_steps=1000,
         logging_steps=25,
-        learning_rate=1e-5,
+        learning_rate=1e-4,
+        lr_scheduler_type="cosine",
+        warmup_steps=100,
+        weight_decay=0.05,
         fp16=True,
         max_steps=-1,
-        warmup_ratio=0.03,
         group_by_length=False,
-        lr_scheduler_type="constant",
     )
     # Trainer
     fine_tuning = SFTTrainer(
@@ -114,7 +116,10 @@ if __name__ == "__main__":
         dataset_text_field="text",
         tokenizer=llama_tokenizer,
         args=train_params,
+        max_seq_length=llama_tokenizer.model_max_length,
     )
+
+    print(fine_tuning.model.print_trainable_parameters())
     # Training
     fine_tuning.train()
     # Save Model

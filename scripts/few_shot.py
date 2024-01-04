@@ -36,7 +36,9 @@ if __name__ == "__main__":
         base_model_name, device_map={"": 0}, quantization_config=quant_config
     )
     base_model.config.use_cache = True
-    base_model.config.pretraining_tp = 1
+
+    pytorch_total_params = base_model.num_parameters()
+    print(pytorch_total_params)
 
     pipe = pipeline(
         "text-generation",
