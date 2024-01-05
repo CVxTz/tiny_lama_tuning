@@ -14,43 +14,28 @@ import pandas as pd
 
 MISSING_ANSWER = "Unanswerable"
 
+MAX_LEN = 1024
 
-def build_data(tokenizer, split="train"):
-    data_name = "squad_v2"
-    data = load_dataset(data_name, split=split)
 
-    data_df = pd.DataFrame(data).drop_duplicates(subset=["title", "context"])
+def build_data(data):
+    data["context"] = data["context"].apply(lambda x: x.replace("\n", " ")[:MAX_LEN])
 
-    data_df["text"] = data_df.apply(
-        lambda x: tokenizer.apply_chat_template(
-            [
-                {
-                    "role": "user",
-                    "content": f"Question: {x['question']}\nContext: {x['context']}",
-                },
-                {
-                    "role": "assistant",
-                    "content": x["answers"]["text"][0]
-                    if x["answers"]["text"]
-                    else MISSING_ANSWER,
-                },
-            ],
-            tokenize=False,
-            add_generation_prompt=False,
-        ),
+    data["text"] = data.apply(
+        lambda x: f"What is the political bias of this new article?\n"
+        f"Context: {x['context']}\n"
+        f"Answer: {x['bias_text']}.",
         axis=1,
     )
 
-    data_small = data_df.sample(16).reset_index(drop=True)
+    print(data["text"].values[0])
 
-    print(data_small["text"].values[0])
+    data_hf = datasets.Dataset.from_pandas(data)
 
-    data_small = datasets.Dataset.from_pandas(data_small)
-
-    return data_small
+    return data_hf
 
 
 if __name__ == "__main__":
+    DATA_PATH = Path(__file__).parents[1] / "data"
     BASE_PATH = Path(__file__).parents[1] / "outputs"
 
     BASE_PATH.mkdir(exist_ok=True)
@@ -63,7 +48,9 @@ if __name__ == "__main__":
         base_model_name, trust_remote_code=True
     )
 
-    training_data = build_data(llama_tokenizer, split="train")
+    train = pd.read_csv(DATA_PATH / "train.csv")
+
+    training_data = build_data(data=train)
 
     print(f"{len(training_data)=}")
 
@@ -81,7 +68,18 @@ if __name__ == "__main__":
         trust_remote_code=True,
     )
 
-    target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'down_proj', 'up_proj', 'lm_head']
+    print(f"{base_model._get_name()=}")
+
+    target_modules = [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "down_proj",
+        "up_proj",
+        "lm_head",
+    ]
     # LoRA Config
     peft_parameters = LoraConfig(
         lora_alpha=8,
@@ -94,13 +92,13 @@ if __name__ == "__main__":
     # Training Params
     train_params = TrainingArguments(
         output_dir=str(BASE_PATH / "results_modified"),
-        num_train_epochs=200,
+        num_train_epochs=2,
         per_device_train_batch_size=4,
         gradient_accumulation_steps=4,
         optim="paged_adamw_32bit",
         save_steps=1000,
         logging_steps=25,
-        learning_rate=1e-4,
+        learning_rate=1e-5,
         lr_scheduler_type="cosine",
         warmup_steps=100,
         weight_decay=0.05,

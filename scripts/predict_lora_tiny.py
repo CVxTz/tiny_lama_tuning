@@ -10,6 +10,7 @@ from transformers import (
     BitsAndBytesConfig,
     TrainingArguments,
     pipeline,
+LlamaForCausalLM
 )
 from time import perf_counter
 from contextlib import contextmanager
@@ -45,7 +46,7 @@ if __name__ == "__main__":
     llama_tokenizer = AutoTokenizer.from_pretrained(
         base_model_name, trust_remote_code=True
     )
-
+    # llama_tokenizer.pad_token = llama_tokenizer.eos_token
     # Quantization Config
     quant_config = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -59,30 +60,28 @@ if __name__ == "__main__":
         device_map={"": 0},
     )
 
-    model = AutoPeftModelForCausalLM.from_pretrained(refined_model, device_map={"": 0}).merge_and_unload()
+    model = AutoPeftModelForCausalLM.from_pretrained(
+        refined_model, device_map={"": 0}
+    ).merge_and_unload()
     model.eval()
 
     text_gen = pipeline(
         task="text-generation",
         model=base_model,
         tokenizer=llama_tokenizer,
-        max_new_tokens=256,
-        do_sample=False,
     )
     text_gen.model = model
 
-    _question = "When did Beyonce start becoming popular?"
-    _context = """Beyoncé Giselle Knowles-Carter (/biːˈjɒnseɪ/ bee-YON-say) (born September 4, 1981) is an American singer, songwriter, record producer and actress. Born and raised in Houston, Texas, she performed in various singing and dancing competitions as a child, and rose to fame in the late 1990s as lead singer of R&B girl-group Destiny's Child. Managed by her father, Mathew Knowles, the group became one of the world's best-selling girl groups of all time. Their hiatus saw the release of Beyoncé's debut album, Dangerously in Love (2003), which established her as a solo artist worldwide, earned five Grammy Awards and featured the Billboard Hot 100 number-one singles "Crazy in Love" and "Baby Boy"."""
-
-    prompt = prepare_prompt(llama_tokenizer, question=_question, context=_context)
+    _context = "Obama associate tells liberals to sabotage Trump's election chances at the ballot box"
+    prompt = f"What is the political bias of this new article?\nContext: {_context}\nAnswer: "
 
     print(prompt)
 
     outputs = text_gen(
         prompt.strip(),
-        max_new_tokens=256,
-        do_sample=True,
+        do_sample=False,
         return_full_text=False,
+        max_new_tokens=20
     )
 
     print(outputs[0]["generated_text"])
