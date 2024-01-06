@@ -14,7 +14,8 @@ class SFTDataset(torch.utils.data.Dataset):
         context_col="context",
         answer_col="answer",
         ignore_index=-100,
-        max_prefix_len=512,
+        max_prefix_len=1024,
+        max_answer_len=32,
     ):
         self.data = data
         self.prefix_template = prefix_template
@@ -23,6 +24,7 @@ class SFTDataset(torch.utils.data.Dataset):
         self.answer_col = answer_col
         self.ignore_index = ignore_index
         self.max_prefix_len = max_prefix_len
+        self.max_answer_len = max_answer_len
 
     def __len__(self):
         return self.data.shape[0]
@@ -34,13 +36,14 @@ class SFTDataset(torch.utils.data.Dataset):
         answer = self.data.loc[idx, self.answer_col]
 
         prefix_ids = [self.tokenizer.bos_token_id] + self.tokenizer.encode(
-            prefix, add_special_tokens=False
+            prefix, add_special_tokens=False, truncation=True
         )
         prefix_ids = prefix_ids[: self.max_prefix_len]
 
-        answer_ids = self.tokenizer.encode(answer, add_special_tokens=False) + [
-            self.tokenizer.eos_token_id
-        ]
+        answer_ids = self.tokenizer.encode(
+            answer, add_special_tokens=False, truncation=True
+        ) + [self.tokenizer.eos_token_id]
+        answer_ids = answer_ids[: self.max_answer_len]
 
         labels = [self.ignore_index] * len(prefix_ids) + answer_ids
 

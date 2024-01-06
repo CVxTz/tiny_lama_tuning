@@ -21,10 +21,8 @@ def build_data(data, tokenizer):
         "What is the political bias of this new article?\nContext: $context\nAnswer: "
     )
 
-    data["context"] = data["context"].apply(lambda x: x.replace("\n", " "))
-    data["answer"] = data["bias_text"].apply(lambda x: x.replace("\n", " "))
-
-    data = data.sample(200).reset_index()
+    # data["context"] = data["context"].apply(lambda x: x.replace("\n", " "))
+    data["answer"] = data["bias_text"]
 
     dataset = SFTDataset(data=data, prefix_template=template, tokenizer=tokenizer)
 
@@ -90,12 +88,12 @@ if __name__ == "__main__":
     # Training Params
     train_params = TrainingArguments(
         output_dir=str(BASE_PATH / "results_modified"),
-        num_train_epochs=16,
+        num_train_epochs=2,
         per_device_train_batch_size=4,
         gradient_accumulation_steps=1,
         optim="paged_adamw_32bit",
-        save_steps=500,
-        logging_steps=10,
+        save_steps=len(training_data) // 5,
+        logging_steps=len(training_data) // 100,
         learning_rate=1e-5,
         lr_scheduler_type="cosine",
         warmup_steps=100,
