@@ -1,20 +1,15 @@
-from dataclasses import dataclass, field
-from typing import Optional
-
-import torch
 from peft import AutoPeftModelForCausalLM
 import torch
 from transformers import (
-    AutoModelForCausalLM,
+    LlamaForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
-    TrainingArguments,
     pipeline,
-LlamaForCausalLM
 )
 from time import perf_counter
 from contextlib import contextmanager
 from pathlib import Path
+from tiny_lama_tuning.generation_utils import get_logit_criteria
 
 
 @contextmanager
@@ -22,19 +17,6 @@ def catch_time() -> float:
     start = perf_counter()
     yield lambda: perf_counter() - start
     print(f"Time: {perf_counter() - start:.3f} seconds")
-
-
-def prepare_prompt(tokenizer, question, context):
-    messages = [
-        {
-            "role": "user",
-            "content": f"Question: {question}\nContext: {context}",
-        }
-    ]
-
-    return tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
 
 
 if __name__ == "__main__":
@@ -54,7 +36,7 @@ if __name__ == "__main__":
         bnb_4bit_compute_dtype=torch.bfloat16,
     )
     # Model
-    base_model = AutoModelForCausalLM.from_pretrained(
+    base_model = LlamaForCausalLM.from_pretrained(
         base_model_name,
         # quantization_config=quant_config,
         device_map={"": 0},
@@ -73,6 +55,7 @@ if __name__ == "__main__":
     text_gen.model = model
 
     _context = "Obama associate tells liberals to sabotage Trump's election chances at the ballot box"
+    _context = "DeSantis says he wouldn't accept role as Nikki Haley's VP pick 'under any circumstances'"
     prompt = f"What is the political bias of this new article?\nContext: {_context}\nAnswer: "
 
     print(prompt)
@@ -81,7 +64,8 @@ if __name__ == "__main__":
         prompt.strip(),
         do_sample=False,
         return_full_text=False,
-        max_new_tokens=20
+        max_new_tokens=200,
+        # logits_processor=get_logit_criteria(tokenizer=llama_tokenizer),
     )
 
     print(outputs[0]["generated_text"])

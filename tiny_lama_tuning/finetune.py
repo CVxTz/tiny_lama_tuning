@@ -1,6 +1,5 @@
 import datasets
 import torch
-from datasets import load_dataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -11,27 +10,25 @@ from peft import LoraConfig
 from trl import SFTTrainer
 from pathlib import Path
 import pandas as pd
+from string import Template
+from tiny_lama_tuning.dataset_utils import SFTDataset, CustomDataCollator
 
 MISSING_ANSWER = "Unanswerable"
 
-MAX_LEN = 1024
 
-
-def build_data(data):
-    data["context"] = data["context"].apply(lambda x: x.replace("\n", " ")[:MAX_LEN])
-
-    data["text"] = data.apply(
-        lambda x: f"What is the political bias of this new article?\n"
-        f"Context: {x['context']}\n"
-        f"Answer: {x['bias_text']}.",
-        axis=1,
+def build_data(data, tokenizer):
+    template = Template(
+        "What is the political bias of this new article?\nContext: $context\nAnswer: "
     )
 
-    print(data["text"].values[0])
+    data["context"] = data["context"].apply(lambda x: x.replace("\n", " "))
+    data["answer"] = data["bias_text"].apply(lambda x: x.replace("\n", " "))
 
-    data_hf = datasets.Dataset.from_pandas(data)
+    data = data.sample(200).reset_index()
 
-    return data_hf
+    dataset = SFTDataset(data=data, prefix_template=template, tokenizer=tokenizer)
+
+    return dataset
 
 
 if __name__ == "__main__":
@@ -50,7 +47,10 @@ if __name__ == "__main__":
 
     train = pd.read_csv(DATA_PATH / "train.csv")
 
-    training_data = build_data(data=train)
+    training_data = build_data(data=train, tokenizer=llama_tokenizer)
+    collator = CustomDataCollator(
+        pad_token=llama_tokenizer.pad_token_id, ignore_index=-100
+    )
 
     print(f"{len(training_data)=}")
 
@@ -67,8 +67,6 @@ if __name__ == "__main__":
         quantization_config=quant_config,
         trust_remote_code=True,
     )
-
-    print(f"{base_model._get_name()=}")
 
     target_modules = [
         "q_proj",
@@ -92,12 +90,12 @@ if __name__ == "__main__":
     # Training Params
     train_params = TrainingArguments(
         output_dir=str(BASE_PATH / "results_modified"),
-        num_train_epochs=2,
+        num_train_epochs=16,
         per_device_train_batch_size=4,
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=1,
         optim="paged_adamw_32bit",
-        save_steps=1000,
-        logging_steps=25,
+        save_steps=500,
+        logging_steps=10,
         learning_rate=1e-5,
         lr_scheduler_type="cosine",
         warmup_steps=100,
@@ -110,8 +108,9 @@ if __name__ == "__main__":
     fine_tuning = SFTTrainer(
         model=base_model,
         train_dataset=training_data,
+        data_collator=collator,
         peft_config=peft_parameters,
-        dataset_text_field="text",
+        dataset_text_field="Why is this mandatory ? lol",
         tokenizer=llama_tokenizer,
         args=train_params,
         max_seq_length=llama_tokenizer.model_max_length,
