@@ -1,4 +1,3 @@
-import datasets
 import torch
 from transformers import (
     AutoModelForCausalLM,
@@ -9,28 +8,11 @@ from transformers import (
 from peft import LoraConfig
 from trl import SFTTrainer
 from pathlib import Path
-import pandas as pd
-from string import Template
-from tiny_lama_tuning.dataset_utils import SFTDataset, CustomDataCollator
-
-MISSING_ANSWER = "Unanswerable"
-
-
-def build_data(data, tokenizer):
-    template = Template(
-        "What is the political bias of this new article?\nContext: $context\nAnswer: "
-    )
-
-    # data["context"] = data["context"].apply(lambda x: x.replace("\n", " "))
-    data["answer"] = data["bias_text"]
-
-    dataset = SFTDataset(data=data, prefix_template=template, tokenizer=tokenizer)
-
-    return dataset
+from tiny_lama_tuning.dataset_utils import CustomDataCollator, build_data
 
 
 if __name__ == "__main__":
-    DATA_PATH = Path(__file__).parents[1] / "data"
+    # DATA_PATH = Path(__file__).parents[1] / "data"
     BASE_PATH = Path(__file__).parents[1] / "outputs"
 
     BASE_PATH.mkdir(exist_ok=True)
@@ -43,9 +25,7 @@ if __name__ == "__main__":
         base_model_name, trust_remote_code=True
     )
 
-    train = pd.read_csv(DATA_PATH / "train.csv")
-
-    training_data = build_data(data=train, tokenizer=llama_tokenizer)
+    training_data = build_data(tokenizer=llama_tokenizer)
     collator = CustomDataCollator(
         pad_token=llama_tokenizer.pad_token_id, ignore_index=-100
     )
@@ -65,6 +45,8 @@ if __name__ == "__main__":
         quantization_config=quant_config,
         trust_remote_code=True,
     )
+
+    base_model.config.use_cache = False
 
     target_modules = [
         "q_proj",
@@ -89,7 +71,7 @@ if __name__ == "__main__":
     train_params = TrainingArguments(
         output_dir=str(BASE_PATH / "results_modified"),
         num_train_epochs=2,
-        per_device_train_batch_size=4,
+        per_device_train_batch_size=8,
         gradient_accumulation_steps=1,
         optim="paged_adamw_32bit",
         save_steps=len(training_data) // 5,

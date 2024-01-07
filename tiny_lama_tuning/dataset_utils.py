@@ -3,6 +3,7 @@ import torch
 from string import Template
 from transformers import AutoTokenizer, PreTrainedTokenizer, DefaultDataCollator
 from typing import Dict, Any, List
+from datasets import load_dataset
 
 
 class SFTDataset(torch.utils.data.Dataset):
@@ -34,6 +35,8 @@ class SFTDataset(torch.utils.data.Dataset):
             context=self.data.loc[idx, self.context_col]
         )
         answer = self.data.loc[idx, self.answer_col]
+        # print(prefix)
+        # print(answer)
 
         prefix_ids = [self.tokenizer.bos_token_id] + self.tokenizer.encode(
             prefix, add_special_tokens=False, truncation=True
@@ -47,7 +50,20 @@ class SFTDataset(torch.utils.data.Dataset):
 
         labels = [self.ignore_index] * len(prefix_ids) + answer_ids
 
-        return {"input_ids": prefix_ids + answer_ids, "labels": labels}
+        return {
+            "input_ids": prefix_ids + answer_ids,
+            "labels": labels,
+            "prompt": prefix,
+            "answer": answer,
+        }
+
+    def get_sample(self, idx):
+        prefix = self.prefix_template.substitute(
+            context=self.data.loc[idx, self.context_col]
+        )
+        answer = self.data.loc[idx, self.answer_col]
+
+        return {"prompt": prefix, "answer": answer}
 
 
 class CustomDataCollator(DefaultDataCollator):
@@ -79,6 +95,21 @@ class CustomDataCollator(DefaultDataCollator):
         }
 
 
+MISSING_ANSWER = "Unanswerable"
+
+
+def build_data(tokenizer, split="train"):
+    template = Template("What is category of this text?\nContext: $context\nAnswer: ")
+
+    data = pd.DataFrame(load_dataset("rungalileo/20_Newsgroups_Fixed", split=split))
+    data["answer"] = data["label"].fillna(MISSING_ANSWER)
+    data["context"] = data["text"]
+
+    dataset = SFTDataset(data=data, prefix_template=template, tokenizer=tokenizer)
+
+    return dataset
+
+
 if __name__ == "__main__":
     base_model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
@@ -97,19 +128,6 @@ if __name__ == "__main__":
     print(llama_tokenizer(" .", return_tensors="pt")["input_ids"].dtype)
     # torch.int64
 
-    template = Template(
-        "What is the political bias of this new article?\nContext: $context\nAnswer: "
-    )
+    _dataset = build_data(llama_tokenizer, split="train")
 
-    df = pd.DataFrame(
-        [
-            {
-                "context": "Obama associate tells liberals to sabotage Trump's election chances at the ballot box",
-                "answer": "right",
-            }
-        ]
-    )
-
-    dataset = SFTDataset(data=df, prefix_template=template, tokenizer=llama_tokenizer)
-
-    print(dataset[0])
+    print(_dataset[0])
