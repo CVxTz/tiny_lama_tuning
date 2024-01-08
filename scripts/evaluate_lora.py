@@ -64,7 +64,7 @@ class PatchedTextGenerationPipeline(TextGenerationPipeline):
 if __name__ == "__main__":
     BASE_PATH = Path(__file__).parents[1] / "outputs"
 
-    refined_model = str(BASE_PATH / "results_modified/checkpoint-2262")
+    refined_model = str(BASE_PATH / "TinyLlama-1.1B-refined")
     base_model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
     llama_tokenizer = AutoTokenizer.from_pretrained(
@@ -126,3 +126,4 @@ if __name__ == "__main__":
     accuracy = 100 * correct_count / len(test_data)
 
     print(f"{accuracy=}")
+    # accuracy=73.60594795539033
